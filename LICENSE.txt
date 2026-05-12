@@ -1,0 +1,17 @@
+EARTHPAGES IMAGE — LICENSE
+Copyright © 2026 Michael William Clark.
+
+1. LICENSE & RESTRICTIONS: 
+This license is the definitive agreement for this software and applies retroactively to all previous versions or iterations, including those distributed under different names. All prior licenses or permissions are hereby revoked. This software is provided free of charge for personal and commercial use. Any redistribution, hosting, or mirroring of this software on other websites or platforms is strictly prohibited without the express written consent of the author. The sale of this software, or any modified versions of it, is strictly prohibited.
+
+2. PRIVACY
+All image processing is performed locally in your browser. No image data
+is ever uploaded or stored externally.
+
+3. NO WARRANTY & GOVERNING LAW
+This software is provided "AS IS" without warranty of any kind. Use at 
+your own risk. This license is governed by the laws of Ontario, Canada.
+
+4. LIABILITY
+The author (Michael William Clark) shall not be liable for any damages,
+errors, or data loss resulting from the use of this tool.
