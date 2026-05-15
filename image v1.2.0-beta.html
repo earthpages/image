@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Earthpages Image</title>
+    <style>
+        :root {
+            --panel-bg: rgba(22, 22, 22, 0.98);
+            --accent: #2563eb;
+            --success: #059669;
+            --danger: #dc2626;
+            --text: #e0e0e0;
+            --grid: rgba(255,255,255,0.35);
+            --border: #383838;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0e0e0e; margin: 0; overflow: hidden; height: 100vh; color: var(--text); }
+
+        /* ── SPLASH ── */
+        #splashOverlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.96);
+            z-index: 9000; display: flex; align-items: center; justify-content: center;
+        }
+        #splashBox {
+            background: #161616; width: 460px; padding: 32px;
+            border-radius: 16px; border: 1px solid #3a3a3a;
+            box-shadow: 0 0 60px rgba(0,0,0,0.9); text-align: center;
+        }
+        #splashBox h2 { margin-top:0; color: var(--accent); letter-spacing:2px; font-size:1.3rem; }
+        #splashBox p  { font-size:0.78rem; color:#777; margin-bottom:0; }
+        #licenseText {
+            height: 200px; overflow-y: scroll; background: #0a0a0a;
+            padding: 14px; border-radius: 8px; font-size: 0.73rem;
+            text-align: left; color: #aaa; line-height: 1.6;
+            border: 1px solid #2a2a2a; margin: 16px 0;
+        }
+        #agreeBtn {
+            background: var(--accent); color: white; border: none;
+            padding: 12px 32px; border-radius: 6px; font-weight: bold;
+            cursor: pointer; opacity: 0.25; pointer-events: none; transition: opacity 0.3s;
+            font-size: 0.85rem; letter-spacing: 0.5px;
+        }
+        #agreeBtn.ready { opacity: 1; pointer-events: auto; }
+        #scrollPrompt { font-size: 0.62rem; color: #fbbf24; margin-top: 10px; font-weight: bold; }
+        #scrollPrompt.hidden { visibility: hidden; }
+
+        /* ── LAYOUT ── */
+        #viewport {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center;
+            padding-left: 230px; 
+        }
+        #canvasContainer {
+            position: relative; line-height: 0;
+            box-shadow: 0 0 60px rgba(0,0,0,0.8);
+        }
+        #mainCanvas { display: block; max-width: 82vw; max-height: 88vh; }
+
+        /* ── CROP OVERLAY ── */
+        #cropBox {
+            position: absolute; border: 1px solid rgba(255,255,255,0.85);
+            box-shadow: 0 0 0 5000px rgba(0,0,0,0.62);
+            cursor: move; display: none; pointer-events: auto;
+        }
+        .gl-v { position:absolute; top:0; width:1px; height:100%; background:var(--grid); pointer-events:none; }
+        .gl-h { position:absolute; left:0; height:1px; width:100%; background:var(--grid); pointer-events:none; }
+
+        /* ── PANEL ── */
+        #settingsPanel {
+            position: absolute; top: 20px; left: 20px; width: 272px;
+            background: var(--panel-bg); border: 1px solid var(--border);
+            border-radius: 12px; z-index: 1000;
+            max-height: calc(100vh - 40px); overflow-y: auto;
+            scrollbar-width: thin; scrollbar-color: #333 transparent;
+        }
+        #settingsPanel::-webkit-scrollbar { width: 4px; }
+        #settingsPanel::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+        .panel-header {
+            padding: 11px 14px; background: #1c1c1c;
+            border-radius: 12px 12px 0 0; cursor: move;
+            font-weight: bold; font-size: 0.68rem; text-transform: uppercase;
+            border-bottom: 1px solid var(--border); color: #666; letter-spacing: 1.5px;
+            position: sticky; top: 0; z-index: 1;
+        }
+        .panel-content { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+        /* ── ACCORDION ── */
+        details { border: 1px solid var(--border); border-radius: 6px; background: #141414; margin-bottom: 4px; }
+        summary { 
+            padding: 8px 10px; font-size: 0.6rem; font-weight: bold; text-transform: uppercase; 
+            letter-spacing: 1px; color: #888; cursor: pointer; list-style: none;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: '▼'; font-size: 0.5rem; color: #444; }
+        details[open] summary { border-bottom: 1px solid var(--border); color: var(--accent); }
+        details[open] summary::after { content: '▲'; color: var(--accent); }
+        .acc-content { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+
+        /* ── MODE TABS ── */
+        #modeTabs { display: flex; border-bottom: 1px solid var(--border); background: #161616; border-radius: 0; }
+        .tab-btn {
+            flex: 1; padding: 9px 4px; background: transparent; border: none;
+            color: #555; font-size: 0.68rem; font-weight: bold; cursor: pointer;
+            letter-spacing: 0.5px; text-transform: uppercase; transition: all 0.15s;
+        }
+        .tab-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+        .tab-pane { display: none; }
+        .tab-pane.active { display: flex; flex-direction: column; gap: 10px; }
+
+        /* ── CONTROLS ── */
+        .group { display: flex; flex-direction: column; gap: 4px; }
+        label { font-size: 0.58rem; color: #999; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        input[type=number] {
+            -moz-appearance: textfield; background: #181818; border: 1px solid #3a3a3a;
+            color: white; padding: 7px 9px; border-radius: 5px; font-size: 0.82rem; width: 100%;
+        }
+        input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+        input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0; }
+
+        button {
+            background: #1c1c1c; border: 1px solid var(--border); color: var(--text);
+            padding: 8px; border-radius: 6px; font-size: 0.78rem; width: 100%; cursor: pointer;
+            transition: background 0.15s;
+        }
+        button:hover { background: #252525; }
+
+        .btn-primary { background: var(--accent); border-color: var(--accent); color: white; font-weight: bold; margin-bottom: 5px; }
+        .btn-primary:hover { background: #1d4ed8; }
+        .btn-save  { background: var(--success); border-color: var(--success); color: white; font-weight: bold; }
+        .btn-save:hover { background: #047857; }
+        .btn-crop-export { background: #7c3aed; border-color: #7c3aed; color: white; font-weight: bold; }
+        .btn-crop-export:hover { background: #6d28d9; }
+
+        .btn-row { display: flex; gap: 5px; }
+        .btn-row button { flex: 1; }
+        .mode-btn { background: #252525; font-size: 0.68rem; font-weight: bold; padding: 6px; color: #999; border: 1px solid #333; }
+        .mode-active { background: var(--accent) !important; color: white !important; border-color: var(--accent) !important; }
+        .tool-btn { background: #252525; border: 1px solid #333; font-size: 0.65rem; font-weight: bold; color: #aaa; }
+        .tool-active { background: #6366f1 !important; color: white !important; border-color: #6366f1 !important; }
+        .btn-reset { background: transparent; border: 1px solid #333; color: #888; font-size: 0.58rem; font-weight: bold; padding: 4px; }
+        .btn-reset:hover { color: #bbb; }
+
+        .resize-row { display: flex; align-items: flex-end; gap: 5px; }
+        #linkBtn { width: 34px; min-width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+        .link-active { background: var(--accent) !important; border-color: var(--accent) !important; color: white !important; }
+
+        .val-display { font-size: 0.7rem; color: var(--accent); font-weight: bold; }
+        .mix-label { color: #fbbf24 !important; }
+
+        #dropperStatus {
+            font-size: 0.58rem; color: #fbbf24; font-weight: bold;
+            text-align: center; display: none; padding: 4px;
+            background: rgba(251,191,36,0.08); border-radius: 4px; margin-bottom: 5px;
+        }
+
+        .info-box {
+            font-size: 0.62rem; color: #999; line-height: 1.6;
+            background: #141414; padding: 10px; border-radius: 6px;
+            border: 1px solid #252525;
+        }
+        kbd { background: #2a2a2a; padding: 1px 4px; border-radius: 3px; color: #ccc; font-family: monospace; border: 1px solid #444; font-size: 0.9em; }
+
+        .canvas-picking {
+            cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cline x1='16' y1='2' x2='16' y2='13' stroke='black' stroke-width='3' stroke-opacity='0.5'/%3E%3Cline x1='16' y1='19' x2='16' y2='30' stroke='black' stroke-width='3' stroke-opacity='0.5'/%3E%3Cline x1='2' y1='16' x2='13' y2='16' stroke='black' stroke-width='3' stroke-opacity='0.5'/%3E%3Cline x1='19' y1='16' x2='30' y2='16' stroke='black' stroke-width='3' stroke-opacity='0.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='none' stroke='black' stroke-width='3' stroke-opacity='0.5'/%3E%3Cline x1='16' y1='2' x2='16' y2='13' stroke='white' stroke-width='1.5'/%3E%3Cline x1='16' y1='19' x2='16' y2='30' stroke='white' stroke-width='1.5'/%3E%3Cline x1='2' y1='16' x2='13' y2='16' stroke='white' stroke-width='1.5'/%3E%3Cline x1='19' y1='16' x2='30' y2='16' stroke='white' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='none' stroke='white' stroke-width='1.5'/%3E%3C/svg%3E") 16 16, crosshair !important;
+        }
+    </style>
+</head>
+<body>
+
+<div id="splashOverlay">
+    <div id="splashBox">
+        <h2>EARTHPAGES IMAGE</h2>
+        <p>v1.2.0-beta</p>
+        <div id="licenseText">
+            <strong>1. TERMS & RESTRICTIONS:</strong> This software is provided free of charge for personal and commercial use. Any redistribution, hosting, or mirroring of this software on other websites or platforms is strictly prohibited without the express written consent of the author. The sale of this software, or any modified versions of it, is strictly prohibited.<br><br>
+            <strong>2. PRIVACY:</strong> All processing is done locally in your browser. No image data is ever uploaded or stored externally.<br><br>
+            <strong>3. NO WARRANTY & GOVERNING LAW:</strong> This software is provided <strong>"AS IS"</strong> without warranty of any kind. Use at 
+your own risk. This license is governed by the laws of <strong>Ontario, Canada</strong>.<br><br>
+            <strong>4. LIABILITY:</strong> The author (Michael William Clark) shall not be liable for any damages, errors, or data loss resulting from the use of this tool.<br><br>
+            <strong>5. PERFORMANCE:</strong> Optimized for high-resolution processing and a lightweight, browser-based app experience.<br><br>
+            <strong>6. WORKFLOW:</strong> Use the <strong>Fix</strong> tab to resize (input or mousewheel), sharpen, and color-correct. Use the <strong>Crop</strong> tab to define and apply a crop region.
+        </div>
+        <div id="scrollPrompt">▼ SCROLL TO THE BOTTOM TO START</div>
+        <button id="agreeBtn">I AGREE &amp; CONTINUE</button>
+    </div>
+</div>
+
+<div id="settingsPanel">
+    <div class="panel-header" id="dragHeader">⚡ Earthpages Image v1.2.0-beta</div>
+
+    <div id="modeTabs">
+        <button class="tab-btn active" id="tabFix"  onclick="switchTab('fix')">⚡ FIX</button>
+        <button class="tab-btn"        id="tabCrop" onclick="switchTab('crop')">✂ CROP</button>
+    </div>
+
+    <div class="panel-content">
+        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">LOAD IMAGE</button>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;">
+
+        <div class="tab-pane active" id="panefix">
+            
+            <details open>
+                <summary>Dimensions</summary>
+                <div class="acc-content">
+                    <div class="resize-row">
+                        <div class="group" style="flex:1"><label>Width</label><input type="number" id="wInput"></div>
+                        <button id="linkBtn" class="link-active" title="Toggle Aspect Ratio Lock">🔗</button>
+                        <div class="group" style="flex:1"><label>Height</label><input type="number" id="hInput"></div>
+                    </div>
+                    <button id="resetDimBtn" class="btn-reset">RESET TO ORIGINAL SIZE</button>
+                </div>
+            </details>
+
+            <details>
+                <summary>Lighting & Tone</summary>
+                <div class="acc-content">
+                    <div class="group">
+                        <div style="display:flex;justify-content:space-between">
+                            <label>Brightness</label>
+                            <span id="brightDisp" class="val-display">0</span>
+                        </div>
+                        <input type="range" id="brightSlider" min="-100" max="100" step="1" value="0">
+                    </div>
+                    <div class="group">
+                        <div style="display:flex;justify-content:space-between">
+                            <label>Contrast</label>
+                            <span id="contrastManualDisp" class="val-display">0</span>
+                        </div>
+                        <input type="range" id="contrastManualSlider" min="-100" max="100" step="1" value="0">
+                    </div>
+                    <button class="tool-btn" id="btnContrast">Auto Contrast</button>
+                    <div class="group" id="grpContrastMix" style="display:none">
+                        <div style="display:flex;justify-content:space-between">
+                            <label class="mix-label">Contrast Mix</label>
+                            <span id="contrastMixDisp" class="val-display">100%</span>
+                        </div>
+                        <input type="range" id="contrastMixSlider" min="0" max="1" step="0.05" value="1">
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary>Color & B&W Mixer</summary>
+                <div class="acc-content">
+                    <div class="group">
+                        <div style="display:flex;justify-content:space-between">
+                            <label>Saturation</label>
+                            <span id="satDisp" class="val-display">100%</span>
+                        </div>
+                        <input type="range" id="satSlider" min="0" max="2" step="0.05" value="1">
+                    </div>
+                    
+                    <div class="group" style="background:#0a0a0a; padding:8px; border-radius:6px; border:1px solid #222;">
+                        <label style="color:#666; margin-bottom:5px; display:block">RGB Channel Mixer</label>
+                        <div class="group">
+                            <div style="display:flex;justify-content:space-between">
+                                <label style="color:#ef4444">Red</label>
+                                <span id="rMixDisp" class="val-display">100%</span>
+                            </div>
+                            <input type="range" id="rMixSlider" min="0" max="2" step="0.05" value="1">
+                        </div>
+                        <div class="group">
+                            <div style="display:flex;justify-content:space-between">
+                                <label style="color:#22c55e">Green</label>
+                                <span id="gMixDisp" class="val-display">100%</span>
+                            </div>
+                            <input type="range" id="gMixSlider" min="0" max="2" step="0.05" value="1">
+                        </div>
+                        <div class="group">
+                            <div style="display:flex;justify-content:space-between">
+                                <label style="color:#3b82f6">Blue</label>
+                                <span id="bMixDisp" class="val-display">100%</span>
+                            </div>
+                            <input type="range" id="bMixSlider" min="0" max="2" step="0.05" value="1">
+                        </div>
+                    </div>
+
+                    <button class="tool-btn" id="btnAutoCol">Auto Color</button>
+                    <div class="group" id="grpColorMix" style="display:none">
+                        <div style="display:flex;justify-content:space-between">
+                            <label class="mix-label">Color Mix</label>
+                            <span id="colorMixDisp" class="val-display">100%</span>
+                        </div>
+                        <input type="range" id="colorMixSlider" min="0" max="1" step="0.05" value="1">
+                    </div>
+
+                    <button class="tool-btn" id="btnPickNeutral">🎨 Remove Color Cast</button>
+                    <div id="dropperStatus">SELECT A NEUTRAL GRAY OR WHITE AREA</div>
+                    <div class="group" id="grpNeutralMix" style="display:none">
+                        <div style="display:flex;justify-content:space-between">
+                            <label class="mix-label">Neutral Mix</label>
+                            <span id="neutralMixDisp" class="val-display">100%</span>
+                        </div>
+                        <input type="range" id="neutralMixSlider" min="0" max="1" step="0.05" value="1">
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary>Sharpening</summary>
+                <div class="acc-content">
+                    <div class="btn-row">
+                        <button class="mode-btn mode-active" id="btnStd">Standard</button>
+                        <button class="mode-btn" id="btnUSM">Unsharp</button>
+                    </div>
+                    <div class="group">
+                        <div style="display:flex;justify-content:space-between">
+                            <label>Amount</label>
+                            <span id="amtDisp" class="val-display">0</span>
+                        </div>
+                        <input type="range" id="amtSlider" min="0" max="3" step="0.1" value="0">
+                    </div>
+                </div>
+            </details>
+            <div class="btn-row" style="margin-top:4px">
+                <button id="undoBtn" disabled style="font-size:0.68rem;">↩ Undo</button>
+                <button id="redoBtn" disabled style="font-size:0.68rem;">↪ Redo</button>
+            </div>
+
+            <div class="btn-row">
+                <button id="dlWebp" class="btn-save">EXPORT WEBP</button>
+                <button id="dlPng"  class="btn-save">EXPORT PNG</button>
+            </div>
+        </div>
+
+        <div class="tab-pane" id="panecrop">
+            <div class="info-box">
+                <strong>HOW TO CROP:</strong><br>
+                • <b>Drag canvas:</b> Draw box<br>
+                • <b>Drag box:</b> Reposition<br>
+                • <kbd>↑↓←→</kbd> Nudge 1px | <kbd>Shift</kbd> 10px
+            </div>
+            <div id="cropReadout">No crop selected</div>
+            <button class="btn-crop-export" id="btnExport" style="display:none;">✂ EXPORT CROP (HI-RES)</button>
+            <button class="btn-save" id="btnCropToFix" style="display:none;">⚡ USE CROP → FIX</button>
+            <button id="btnClearCrop" class="btn-reset" style="display:none;">CLEAR CROP</button>
+        </div>
+    </div>
+</div>
+
+<div id="viewport">
+    <div id="canvasContainer">
+        <canvas id="mainCanvas"></canvas>
+        <div id="cropBox">
+            <div class="gl-v" style="left:33.33%"></div>
+            <div class="gl-v" style="left:66.66%"></div>
+            <div class="gl-h" style="top:33.33%"></div>
+            <div class="gl-h" style="top:66.66%"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  SPLASH & TABS (RETAINED)
+// ══════════════════════════════════════
+(function(){
+    const lic = document.getElementById('licenseText');
+    const btn = document.getElementById('agreeBtn');
+    const prm = document.getElementById('scrollPrompt');
+    lic.onscroll = () => { if (lic.scrollHeight - lic.scrollTop <= lic.clientHeight + 2) { btn.classList.add('ready'); prm.classList.add('hidden'); } };
+    btn.onclick = () => { document.getElementById('splashOverlay').style.display = 'none'; };
+})();
+
+let currentTab = 'fix';
+function switchTab(tab) {
+    currentTab = tab;
+    document.getElementById('tabFix').classList.toggle('active', tab === 'fix');
+    document.getElementById('tabCrop').classList.toggle('active', tab === 'crop');
+    document.getElementById('panefix').classList.toggle('active', tab === 'fix');
+    document.getElementById('panecrop').classList.toggle('active', tab === 'crop');
+    if (tab === 'crop') { if (hasCrop) cropBoxEl.style.display = 'block'; canvas.style.cursor = 'crosshair'; } 
+    else { cropBoxEl.style.display = 'none'; canvas.style.cursor = pickingNeutral ? '' : 'default'; canvas.classList.toggle('canvas-picking', pickingNeutral); }
+}
+
+// ══════════════════════════════════════
+//  CANVAS & ENGINE STATE
+// ══════════════════════════════════════
+const canvas = document.getElementById('mainCanvas'), ctx = canvas.getContext('2d', { willReadFrequently: true });
+const cropBoxEl = document.getElementById('cropBox'), container = document.getElementById('canvasContainer');
+let originalImg = new Image(), originalAspect = 1, masterW = 0, masterH = 0, sourceImg = null;
+let currentMode = 'STD', autoColor = false, autoContrast = false, isLinked = true, whitePoint = null;
+let undoStack = [], redoStack = [], pickingNeutral = false;
+
+// Sliders state
+let brightness = 0, saturation = 1, manualContrast = 0;
+let rMix = 1, gMix = 1, bMix = 1; // New Channel Mixers
+let neutralMix = 1, colorMix = 1, contrastMix = 1;
+
+// Crop State
+let hasCrop = false, isDrawing = false, isMoving = false, cropUndoSnapshot = null;
+let startX, startY, moveOffsetX, moveOffsetY, boxL = 0, boxT = 0, boxW = 0, boxH = 0;
+
+// ══════════════════════════════════════
+//  FILE LOAD & RESET
+// ══════════════════════════════════════
+document.getElementById('fileInput').onchange = (e) => {
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        sourceImg = new Image(); sourceImg.src = ev.target.result;
+        originalImg = new Image();
+        originalImg.onload = () => {
+            originalAspect = originalImg.width / originalImg.height;
+            masterW = originalImg.width; masterH = originalImg.height;
+            const displayW = Math.min(masterW, Math.floor(window.innerWidth - 312) * 0.97 | 0);
+            const displayH = Math.round(displayW / originalAspect);
+            document.getElementById('wInput').value = displayW; document.getElementById('hInput').value = displayH;
+            undoStack = []; redoStack = []; clearCrop(); resetControlValues(); render(); saveState();
+        };
+        originalImg.src = ev.target.result;
+    };
+    reader.readAsDataURL(f);
+};
+
+function resetControlValues() {
+    brightness = 0; manualContrast = 0; saturation = 1; rMix = 1; gMix = 1; bMix = 1;
+    document.getElementById('brightSlider').value = 0; document.getElementById('brightDisp').innerText = 0;
+    document.getElementById('contrastManualSlider').value = 0; document.getElementById('contrastManualDisp').innerText = 0;
+    document.getElementById('satSlider').value = 1; document.getElementById('satDisp').innerText = '100%';
+    document.getElementById('rMixSlider').value = 1; document.getElementById('rMixDisp').innerText = '100%';
+    document.getElementById('gMixSlider').value = 1; document.getElementById('gMixDisp').innerText = '100%';
+    document.getElementById('bMixSlider').value = 1; document.getElementById('bMixDisp').innerText = '100%';
+}
+
+// ══════════════════════════════════════
+//  RESIZE & SLIDER LISTENERS
+// ══════════════════════════════════════
+const linkBtn = document.getElementById('linkBtn');
+linkBtn.onclick = () => { isLinked = !isLinked; linkBtn.classList.toggle('link-active', isLinked); linkBtn.innerText = isLinked ? '🔗' : '🔓'; };
+document.getElementById('resetDimBtn').onclick = () => { if (!originalImg.src) return; document.getElementById('wInput').value = masterW; document.getElementById('hInput').value = masterH; render(true); };
+
+[document.getElementById('wInput'), document.getElementById('hInput')].forEach(inp => {
+    inp.oninput = () => { if (isLinked) { if (inp.id === 'wInput') document.getElementById('hInput').value = Math.round(inp.value / originalAspect); else document.getElementById('wInput').value = Math.round(inp.value * originalAspect); } render(false); };
+    inp.onchange = () => saveState();
+});
+
+// Generic Slider Setup
+function setupSlider(id, dispId, setVar, isPercent=false) {
+    const s = document.getElementById(id);
+    s.oninput = () => {
+        let val = parseFloat(s.value);
+        setVar(val);
+        document.getElementById(dispId).innerText = isPercent ? Math.round(val*100)+'%' : val;
+        render(false);
+    };
+    s.onchange = () => saveState();
+}
+
+setupSlider('brightSlider', 'brightDisp', v => brightness = v);
+setupSlider('contrastManualSlider', 'contrastManualDisp', v => manualContrast = v);
+setupSlider('satSlider', 'satDisp', v => saturation = v, true);
+setupSlider('rMixSlider', 'rMixDisp', v => rMix = v, true);
+setupSlider('gMixSlider', 'gMixDisp', v => gMix = v, true);
+setupSlider('bMixSlider', 'bMixDisp', v => bMix = v, true);
+
+const amtSlider = document.getElementById('amtSlider');
+amtSlider.oninput = () => { document.getElementById('amtDisp').innerText = amtSlider.value; render(false); };
+amtSlider.onchange = () => saveState();
+
+function setupMix(id, dispId, setVar) {
+    const s = document.getElementById(id);
+    s.oninput = () => { setVar(parseFloat(s.value)); document.getElementById(dispId).innerText = Math.round(s.value*100)+'%'; render(false); };
+    s.onchange = () => saveState();
+}
+setupMix('neutralMixSlider', 'neutralMixDisp', v => neutralMix = v);
+setupMix('colorMixSlider', 'colorMixDisp', v => colorMix = v);
+setupMix('contrastMixSlider', 'contrastMixDisp', v => contrastMix = v);
+
+// ══════════════════════════════════════
+//  CORE RENDER ENGINE
+// ══════════════════════════════════════
+function blendInto(dst, src, mix) { if (mix >= 1) { dst.set(src); return; } if (mix <= 0) return; for (let i = 0; i < dst.length; i++) dst[i] = dst[i] * (1 - mix) + src[i] * mix; }
+
+function render(shouldSave = false) {
+    if (!originalImg.src) return;
+    const tw = parseInt(document.getElementById('wInput').value)||100, th = parseInt(document.getElementById('hInput').value)||100;
+    canvas.width = tw; canvas.height = th;
+    ctx.drawImage(originalImg, 0, 0, tw, th);
+    const running = ctx.getImageData(0, 0, tw, th).data;
+
+    const cf = (259 * (manualContrast + 255)) / (255 * (259 - manualContrast));
+
+    for (let i = 0; i < running.length; i += 4) {
+        let r = running[i], g = running[i+1], b = running[i+2];
+
+        // 1. Brightness
+        if (brightness !== 0) { r += brightness; g += brightness; b += brightness; }
+
+        // 2. Manual Contrast
+        if (manualContrast !== 0) { r = cf*(r-128)+128; g = cf*(g-128)+128; b = cf*(b-128)+128; }
+
+        // 3. RGB Channel Mixer (Creative / B&W Contrast)
+        r *= rMix; g *= gMix; b *= bMix;
+
+        // 4. Saturation (B&W at 0)
+        if (saturation !== 1) {
+            const lum = 0.299*r + 0.587*g + 0.114*b;
+            r = lum + (r - lum) * saturation; g = lum + (g - lum) * saturation; b = lum + (b - lum) * saturation;
+        }
+
+        running[i] = r; running[i+1] = g; running[i+2] = b;
+    }
+
+    // White Balance
+    if (whitePoint && neutralMix > 0) {
+        const src = new Uint8ClampedArray(running), rs = whitePoint.target/whitePoint.r, gs = whitePoint.target/whitePoint.g, bs = whitePoint.target/whitePoint.b;
+        const eff = new Uint8ClampedArray(src);
+        for (let i = 0; i < eff.length; i+=4) { eff[i]=Math.min(255,src[i]*rs); eff[i+1]=Math.min(255,src[i+1]*gs); eff[i+2]=Math.min(255,src[i+2]*bs); eff[i+3]=255; }
+        blendInto(running, eff, neutralMix);
+    }
+
+    // Auto Color
+    if (autoColor && colorMix > 0) {
+        const src = new Uint8ClampedArray(running), eff = new Uint8ClampedArray(src);
+        let min=[255,255,255], max=[0,0,0];
+        for (let i=0;i<src.length;i+=4) { for(let c=0;c<3;c++){ if(src[i+c]<min[c])min[c]=src[i+c]; if(src[i+c]>max[c])max[c]=src[i+c]; } }
+        for (let i=0;i<eff.length;i+=4) { for(let c=0;c<3;c++) eff[i+c]=((src[i+c]-min[c])/(max[c]-min[c]||1))*255; }
+        blendInto(running, eff, colorMix);
+    }
+
+    // Auto Contrast
+    if (autoContrast && contrastMix > 0) {
+        const src = new Uint8ClampedArray(running), eff = new Uint8ClampedArray(src);
+        let minL=255, maxL=0;
+        for (let i=0;i<src.length;i+=4){ const l=0.299*src[i]+0.587*src[i+1]+0.114*src[i+2]; if(l<minL)minL=l; if(l>maxL)maxL=l; }
+        const rng=maxL-minL||1;
+        for (let i=0;i<eff.length;i+=4){ for(let c=0;c<3;c++) eff[i+c]=((src[i+c]-minL)/rng)*255; }
+        blendInto(running, eff, contrastMix);
+    }
+
+    // Sharpen
+    const amt = parseFloat(amtSlider.value);
+    if (amt > 0) {
+        const src = new Uint8ClampedArray(running), tmpData = new ImageData(new Uint8ClampedArray(src), tw, th);
+        const sharpened = (currentMode === 'STD') ? applyStdSharpen(tmpData, amt) : applyUSM(tmpData, amt);
+        blendInto(running, sharpened.data, 1);
+    }
+
+    ctx.putImageData(new ImageData(running, tw, th), 0, 0);
+    if (shouldSave) saveState();
+
+    document.getElementById('btnAutoCol').classList.toggle('tool-active', autoColor);
+    document.getElementById('btnContrast').classList.toggle('tool-active', autoContrast);
+    document.getElementById('btnPickNeutral').classList.toggle('tool-active', !!whitePoint);
+    document.getElementById('btnStd').classList.toggle('mode-active', currentMode==='STD');
+    document.getElementById('btnUSM').classList.toggle('mode-active', currentMode==='USM');
+    document.getElementById('grpNeutralMix').style.display = whitePoint ? 'flex' : 'none';
+    document.getElementById('grpColorMix').style.display = autoColor ? 'flex' : 'none';
+    document.getElementById('grpContrastMix').style.display = autoContrast ? 'flex' : 'none';
+}
+
+// ── Sharpening Math ──
+function applyStdSharpen(data, amt) {
+    const w=data.width, h=data.height, p=data.data, out=new Uint8ClampedArray(p.length), a=-amt, b=1+(4*amt);
+    for (let y=1;y<h-1;y++) { for (let x=1;x<w-1;x++) {
+        const i=(y*w+x)*4;
+        for (let c=0;c<3;c++) out[i+c]=b*p[i+c]+a*(p[((y-1)*w+x)*4+c]+p[((y+1)*w+x)*4+c]+p[(y*w+(x-1))*4+c]+p[(y*w+(x+1))*4+c]);
+        out[i+3]=255;
+    }}
+    data.data.set(out); return data;
+}
+function applyUSM(data, amt) {
+    const pixels=data.data, w=data.width, h=data.height, orig=new Uint8ClampedArray(pixels), blurred=boxBlur(orig,w,h,1);
+    for (let i=0;i<pixels.length;i+=4) { for (let c=0;c<3;c++) pixels[i+c]=Math.min(255,Math.max(0,orig[i+c]+(orig[i+c]-blurred[i+c])*amt)); }
+    return data;
+}
+function boxBlur(pixels, w, h, r) {
+    const out=new Uint8ClampedArray(pixels.length);
+    for (let y=0;y<h;y++) { for (let x=0;x<w;x++) {
+        let rS=0,gS=0,bS=0,cnt=0;
+        for (let ky=-r;ky<=r;ky++) { for (let kx=-r;kx<=r;kx++) {
+            const nx=x+kx, ny=y+ky; if (nx>=0&&nx<w&&ny>=0&&ny<h) { const i=(ny*w+nx)*4; rS+=pixels[i]; gS+=pixels[i+1]; bS+=pixels[i+2]; cnt++; }
+        }}
+        const i=(y*w+x)*4; out[i]=rS/cnt; out[i+1]=gS/cnt; out[i+2]=bS/cnt; out[i+3]=255;
+    }}
+    return out;
+}
+
+// ══════════════════════════════════════
+//  UNDO / REDO / STATE
+// ══════════════════════════════════════
+function saveState() {
+    const s = JSON.stringify({
+        w: document.getElementById('wInput').value, h: document.getElementById('hInput').value,
+        amt: amtSlider.value, mode: currentMode, col: autoColor, con: autoContrast, wp: whitePoint, link: isLinked,
+        nm: neutralMix, cm: colorMix, ctm: contrastMix, br: brightness, sa: saturation, mc: manualContrast,
+        rm: rMix, gm: gMix, bm: bMix
+    });
+    if (undoStack.length > 0 && undoStack[undoStack.length-1] === s) return;
+    undoStack.push(s); if (undoStack.length > 30) undoStack.shift();
+    redoStack = []; updateUndoButtons();
+}
+
+function updateUndoButtons() { document.getElementById('undoBtn').disabled = undoStack.length <= 1; document.getElementById('redoBtn').disabled = redoStack.length === 0; }
+
+function applyState(s) {
+    const d=JSON.parse(s);
+    document.getElementById('wInput').value=d.w; document.getElementById('hInput').value=d.h;
+    amtSlider.value=d.amt; document.getElementById('amtDisp').innerText=d.amt;
+    currentMode=d.mode; autoColor=d.col; autoContrast=d.con; whitePoint=d.wp; isLinked=d.link;
+    brightness = d.br??0; document.getElementById('brightSlider').value = brightness; document.getElementById('brightDisp').innerText = brightness;
+    saturation = d.sa??1; document.getElementById('satSlider').value = saturation; document.getElementById('satDisp').innerText = Math.round(saturation*100)+'%';
+    manualContrast = d.mc??0; document.getElementById('contrastManualSlider').value = manualContrast; document.getElementById('contrastManualDisp').innerText = manualContrast;
+    rMix = d.rm??1; document.getElementById('rMixSlider').value = rMix; document.getElementById('rMixDisp').innerText = Math.round(rMix*100)+'%';
+    gMix = d.gm??1; document.getElementById('gMixSlider').value = gMix; document.getElementById('gMixDisp').innerText = Math.round(gMix*100)+'%';
+    bMix = d.bm??1; document.getElementById('bMixSlider').value = bMix; document.getElementById('bMixDisp').innerText = Math.round(bMix*100)+'%';
+    neutralMix = d.nm??1; colorMix = d.cm??1; contrastMix = d.ctm??1;
+    linkBtn.classList.toggle('link-active', isLinked); linkBtn.innerText=isLinked?'🔗':'🔓';
+    render(false); updateUndoButtons();
+}
+
+document.getElementById('undoBtn').onclick = () => {
+    if (undoStack.length <= 1) return;
+    redoStack.push(undoStack.pop());
+    if (undoStack[undoStack.length - 1] === '__crop_undo__') {
+        undoStack.pop();
+        if (cropUndoSnapshot) {
+            const snap = cropUndoSnapshot; cropUndoSnapshot = null;
+            const restoreImg = new Image();
+            restoreImg.onload = () => {
+                originalImg = restoreImg; sourceImg = restoreImg; originalAspect = snap.originalAspect; masterW = snap.masterW; masterH = snap.masterH;
+                undoStack = snap.fixState ? [snap.fixState] : []; redoStack = [];
+                if (snap.fixState) applyState(snap.fixState); else render(false);
+                updateUndoButtons(); switchTab('crop');
+            };
+            restoreImg.src = snap.dataURL;
+        }
+        return;
+    }
+    applyState(undoStack[undoStack.length - 1]);
+};
+document.getElementById('redoBtn').onclick = () => { if(redoStack.length>0){ const s=redoStack.pop(); undoStack.push(s); applyState(s); } };
+
+// ══════════════════════════════════════
+//  TOOLS & EXPORT
+// ══════════════════════════════════════
+document.getElementById('btnStd').onclick = () => { currentMode='STD'; render(true); };
+document.getElementById('btnUSM').onclick = () => { currentMode='USM'; render(true); };
+document.getElementById('btnAutoCol').onclick = () => { autoColor=!autoColor; render(true); };
+document.getElementById('btnContrast').onclick = () => { autoContrast=!autoContrast; render(true); };
+document.getElementById('btnPickNeutral').onclick = () => { pickingNeutral = !pickingNeutral; document.getElementById('dropperStatus').style.display = pickingNeutral ? 'block' : 'none'; canvas.classList.toggle('canvas-picking', pickingNeutral); };
+
+canvas.onclick = (e) => {
+    if (currentTab !== 'fix' || !pickingNeutral) return;
+    const rect=canvas.getBoundingClientRect(), scaleX=canvas.width/rect.width, scaleY=canvas.height/rect.height;
+    const x=(e.clientX-rect.left)*scaleX, y=(e.clientY-rect.top)*scaleY;
+    const px=ctx.getImageData(x,y,1,1).data;
+    whitePoint={ r:px[0], g:px[1], b:px[2], target:(px[0]+px[1]+px[2])/3 };
+    pickingNeutral=false; canvas.classList.remove('canvas-picking'); document.getElementById('dropperStatus').style.display='none'; render(true);
+};
+
+function download(fmt) { const l=document.createElement('a'); l.download='Earthpages-Edit.'+fmt; l.href=canvas.toDataURL('image/'+fmt, 0.92); l.click(); }
+document.getElementById('dlWebp').onclick = () => download('webp');
+document.getElementById('dlPng').onclick  = () => download('png');
+
+// ══════════════════════════════════════
+//  CROP LOGIC (UNCHANGED)
+// ══════════════════════════════════════
+document.getElementById('viewport').addEventListener('mousedown', (e) => {
+    if (currentTab !== 'crop' || !originalImg.src) return;
+    const rect=container.getBoundingClientRect(), mx=Math.max(0,Math.min(e.clientX-rect.left, rect.width)), my=Math.max(0,Math.min(e.clientY-rect.top, rect.height));
+    if (hasCrop && mx>=boxL && mx<=boxL+boxW && my>=boxT && my<=boxT+boxH) { isMoving=true; moveOffsetX=mx-boxL; moveOffsetY=my-boxT; } 
+    else { isDrawing=true; startX=mx; startY=my; boxL=mx; boxT=my; boxW=0; boxH=0; cropBoxEl.style.display='block'; updateCropUI(); }
+});
+window.onmousemove = (e) => {
+    if (!isDrawing && !isMoving) return;
+    const rect=container.getBoundingClientRect(), mx=Math.max(0,Math.min(e.clientX-rect.left, rect.width)), my=Math.max(0,Math.min(e.clientY-rect.top, rect.height));
+    if (isDrawing) { boxL=Math.min(startX,mx); boxT=Math.min(startY,my); boxW=Math.abs(startX-mx); boxH=Math.abs(startY-my); } 
+    else if (isMoving) { boxL=Math.max(0,Math.min(mx-moveOffsetX, rect.width-boxW)); boxT=Math.max(0,Math.min(my-moveOffsetY, rect.height-boxH)); }
+    updateCropUI();
+};
+window.onmouseup = () => { if (isDrawing || isMoving) { isDrawing=false; isMoving=false; hasCrop = (boxW>5 && boxH>5); document.getElementById('btnExport').style.display = hasCrop ? 'block' : 'none'; document.getElementById('btnCropToFix').style.display = hasCrop ? 'block' : 'none'; document.getElementById('btnClearCrop').style.display = hasCrop ? 'block' : 'none'; document.getElementById('cropReadout').style.display = hasCrop ? 'block' : 'none'; if (!hasCrop) cropBoxEl.style.display='none'; updateCropReadout(); } };
+function updateCropUI() { cropBoxEl.style.left=boxL+'px'; cropBoxEl.style.top=boxT+'px'; cropBoxEl.style.width=boxW+'px'; cropBoxEl.style.height=boxH+'px'; updateCropReadout(); }
+function updateCropReadout() { if (!hasCrop && !isDrawing) return; const rect=container.getBoundingClientRect(), scale = sourceImg ? sourceImg.naturalWidth / rect.width : 1; document.getElementById('cropReadout').innerText = Math.round(boxW*scale)+'×'+Math.round(boxH*scale)+' px'; }
+function clearCrop() { hasCrop=false; boxL=boxT=boxW=boxH=0; cropBoxEl.style.display='none'; document.getElementById('btnExport').style.display='none'; document.getElementById('btnCropToFix').style.display='none'; document.getElementById('btnClearCrop').style.display='none'; document.getElementById('cropReadout').style.display='none'; }
+document.getElementById('btnClearCrop').onclick = clearCrop;
+window.onkeydown = (e) => { if (currentTab !== 'crop' || !hasCrop) return; const step=e.shiftKey?10:1, rect=container.getBoundingClientRect(); if (e.key==='ArrowLeft') boxL=Math.max(0,boxL-step); if (e.key==='ArrowRight') boxL=Math.min(rect.width-boxW,boxL+step); if (e.key==='ArrowUp') boxT=Math.max(0,boxT-step); if (e.key==='ArrowDown') boxT=Math.min(rect.height-boxH,boxT+step); if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) { e.preventDefault(); updateCropUI(); } };
+
+document.getElementById('btnExport').onclick = () => {
+    const rect = container.getBoundingClientRect(), imgSrc = sourceImg || originalImg, scale = imgSrc.naturalWidth / rect.width;
+    const out=document.createElement('canvas'); out.width=boxW*scale; out.height=boxH*scale;
+    out.getContext('2d').drawImage(imgSrc, boxL*scale, boxT*scale, boxW*scale, boxH*scale, 0, 0, boxW*scale, boxH*scale);
+    const l=document.createElement('a'); l.download='Earthpages-Crop.png'; l.href=out.toDataURL('image/png'); l.click();
+};
+
+document.getElementById('btnCropToFix').onclick = () => {
+    const rect = container.getBoundingClientRect(), imgSrc = sourceImg || originalImg, scale = imgSrc.naturalWidth / rect.width;
+    const tmp = document.createElement('canvas'); tmp.width=boxW*scale; tmp.height=boxH*scale;
+    tmp.getContext('2d').drawImage(imgSrc, boxL*scale, boxT*scale, boxW*scale, boxH*scale, 0, 0, boxW*scale, boxH*scale);
+    cropUndoSnapshot = { dataURL: (sourceImg || originalImg).src, fixState: undoStack.length > 0 ? undoStack[undoStack.length - 1] : null, masterW, masterH, originalAspect };
+    const newImg = new Image();
+    newImg.onload = () => {
+        originalImg = newImg; sourceImg = newImg; originalAspect = newImg.width / newImg.height; masterW = newImg.width; masterH = newImg.height;
+        const dw = Math.min(masterW, Math.floor((window.innerWidth-312)*0.97));
+        document.getElementById('wInput').value = dw; document.getElementById('hInput').value = Math.round(dw/originalAspect);
+        whitePoint = null; autoColor = false; autoContrast = false; neutralMix = 1; colorMix = 1; contrastMix = 1;
+        resetControlValues(); amtSlider.value = 0; document.getElementById('amtDisp').innerText = '0';
+        currentMode = 'STD'; undoStack = []; redoStack = []; clearCrop(); render(); saveState();
+        undoStack.unshift('__crop_undo__'); updateUndoButtons(); switchTab('fix');
+    };
+    newImg.src = tmp.toDataURL('image/png');
+};
+
+// Panel Drag Logic
+(function(){
+    const hdr=document.getElementById('dragHeader'), pan=document.getElementById('settingsPanel');
+    let drg=false, ox=0, oy=0;
+    hdr.onmousedown=(e)=>{ drg=true; ox=pan.offsetLeft-e.clientX; oy=pan.offsetTop-e.clientY; };
+    document.addEventListener('mousemove',(e)=>{ if(drg){ pan.style.left=(e.clientX+ox)+'px'; pan.style.top=(e.clientY+oy)+'px'; } });
+    document.addEventListener('mouseup',()=>drg=false);
+})();
+</script>
+</body>
+</html>
